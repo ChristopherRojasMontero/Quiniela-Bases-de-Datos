@@ -2,8 +2,8 @@
 // Cuando el estado cambia, React vuelve a dibujar el componente automáticamente.
 import { useState } from 'react'
 
-// useNavigate es un hook que devuelve una función para cambiar la URL de la app (sin recargar la página).
-import { useNavigate } from 'react-router-dom'
+// useNavigate cambia la URL de la app (sin recargar la página); Link crea enlaces internos.
+import { useNavigate, Link } from 'react-router-dom'
 
 // axios es una librería para hacer peticiones HTTP (como GET, POST) al backend.
 import axios from 'axios'
@@ -79,6 +79,8 @@ function Login() {
                     {error && <p style={styles.error}>{error}</p>}
                     <button style={styles.button} type="submit">Entrar</button>
                 </form>
+                {/* Enlace para que un usuario nuevo pueda crear una cuenta. */}
+                <p style={styles.link}>¿No tenés cuenta? <Link to="/registro">Registrate</Link></p>
             </div>
         </div>
     )
@@ -93,6 +95,7 @@ const styles = {
     input:     { width: '100%', padding: '0.7rem', marginBottom: '1rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '1rem' },
     button:    { width: '100%', padding: '0.8rem', background: '#27ae60', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '1rem', cursor: 'pointer' },
     error:     { color: 'red', marginBottom: '1rem', fontSize: '0.9rem' },
+    link:      { textAlign: 'center', marginTop: '1rem', fontSize: '0.9rem' },
 }
 
 // Exportamos el componente para que pueda usarse en otras partes de la app.

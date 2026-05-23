@@ -1,0 +1,71 @@
+# docker-compose para levantar el proyecto completo (base de datos + backend + frontend)
+# sin modificar nada del código. Levantar todo con:  docker compose up
+# Luego abrir el navegador en:  http://localhost:5173
+#
+# Notas:
+# - La base de datos se inicializa automáticamente cargando base.sql la primera vez.
+# - El frontend tiene hardcodeada la URL http://localhost:3000; como el navegador corre
+#   en tu máquina y publicamos el puerto 3000 del backend, funciona sin cambios.
+
+services:
+  # ---------- Base de datos PostgreSQL ----------
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER:     quiniela
+      POSTGRES_PASSWORD: quiniela
+      POSTGRES_DB:       quiniela_db
+    ports:
+      - "5432:5432"
+    volumes:
+      # base.sql se ejecuta una sola vez, cuando el volumen de datos está vacío.
+      - ./base.sql:/docker-entrypoint-initdb.d/base.sql:ro
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      # El backend espera a que la base responda antes de arrancar.
+      test: ["CMD-SHELL", "pg_isready -U quiniela -d quiniela_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Backend (Express) ----------
+  backend:
+    image: node:22
+    working_dir: /app
+    # Instala dependencias dentro del contenedor y arranca el servidor.
+    command: sh -c "npm install && node index.js"
+    environment:
+      DB_HOST:     db
+      DB_PORT:     5432
+      DB_NAME:     quiniela_db
+      DB_USER:     quiniela
+      DB_PASSWORD: quiniela
+      JWT_SECRET:  clave-secreta-de-desarrollo
+      PORT:        3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./quiniela/backend:/app
+      # Volumen anónimo: evita que node_modules del contenedor pise tu carpeta local.
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ---------- Frontend (Vite + React) ----------
+  frontend:
+    image: node:22
+    working_dir: /app
+    # --host hace que Vite escuche en 0.0.0.0 para ser accesible desde el navegador del host.
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./quiniela/frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+# Volumen persistente para que los datos de PostgreSQL sobrevivan entre reinicios.
+volumes:
+  db_data:

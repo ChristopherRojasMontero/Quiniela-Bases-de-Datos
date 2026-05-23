@@ -4,6 +4,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 
 // Importamos las páginas principales de nuestra app.
 import Login from './pages/Login'
+import Registro from './pages/Registro'
 import Dashboard from './pages/Dashboard'
 
 // Componente principal de la app. Se encarga de mostrar qué página corresponde según la URL.
@@ -20,6 +21,9 @@ function App() {
 
         {/* Ruta del login: muestra la pantalla de inicio de sesión. */}
         <Route path="/login"   element={<Login />} />
+
+        {/* Ruta del registro: muestra el formulario para crear una cuenta nueva. */}
+        <Route path="/registro" element={<Registro />} />
 
         {/* Ruta del dashboard: solo accesible si hay token. Si no, redirige al login. */}
         <Route path="/dashboard" element={token ? <Dashboard /> : <Navigate to="/login" />} />

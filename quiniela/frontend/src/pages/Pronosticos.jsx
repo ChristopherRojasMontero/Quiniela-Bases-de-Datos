@@ -70,7 +70,7 @@ function Pronosticos() {
     const registrar = async (id_partido) => {
         const p = pronosticos[id_partido]
         // Validación: avisamos si falta alguno de los marcadores.
-        if (!p?.goles_local_predicho === undefined || !p?.goles_visitante_predicho === undefined) {
+        if (!p?.goles_local_predicho || !p?.goles_visitante_predicho) {
             return alert('Ingresá ambos marcadores')
         }
         try {

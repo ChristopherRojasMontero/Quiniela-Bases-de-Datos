@@ -16,6 +16,24 @@ const registrar = async (req, res) => {
     }
 
     try {
+        // El usuario debe estar inscrito en la quiniela para poder pronosticar.
+        const inscrito = await pool.query(
+            'SELECT 1 FROM inscripcion WHERE id_usuario = $1 AND id_quiniela = $2',
+            [id_usuario, id_quiniela]
+        );
+        if (inscrito.rows.length === 0) {
+            return res.status(403).json({ error: 'Debés estar inscrito en la quiniela para pronosticar' });
+        }
+
+        // El partido debe pertenecer a la quiniela indicada.
+        const pertenece = await pool.query(
+            'SELECT 1 FROM quiniela_partido WHERE id_quiniela = $1 AND id_partido = $2',
+            [id_quiniela, id_partido]
+        );
+        if (pertenece.rows.length === 0) {
+            return res.status(400).json({ error: 'El partido no pertenece a esta quiniela' });
+        }
+
         // Insertamos el pronóstico en la base.
         const result = await pool.query(
             `INSERT INTO pronostico (id_usuario, id_partido, id_quiniela, goles_local_predicho, goles_visitante_predicho)
