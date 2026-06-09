@@ -1,28 +1,21 @@
-// useState guarda valores que pueden cambiar (estado).
-// useEffect ejecuta código en momentos específicos del ciclo de vida del componente (por ejemplo, al montarse).
 import { useState, useEffect } from 'react'
-
-// Instancia de axios ya configurada con la URL base y el token de autenticación.
 import api from '../services/api'
 
-// Componente que muestra la lista de quinielas disponibles y permite inscribirse a ellas.
 function Quinielas() {
-    // Estado "quinielas": lista de quinielas que recibimos del backend. Empieza vacío.
-    const [quinielas, setQuinielas] = useState([])
+    const [quinielas, setQuinielas]         = useState([])
+    const [partidos, setPartidos]           = useState([])
+    const [error, setError]                 = useState('')
+    const [quinielaExpandida, setQuinielaExpandida] = useState(null)
+    const [partidoSeleccionado, setPartidoSeleccionado] = useState('')
 
-    // Estado "error": mensaje de error si algo falla al cargar.
-    const [error, setError]         = useState('')
-
-    // Leemos los datos del usuario logueado desde localStorage. JSON.parse convierte el texto en objeto.
     const usuario = JSON.parse(localStorage.getItem('usuario'))
+    const esAdmin = usuario?.tipo_usuario === 'administrador'
 
-    // useEffect con [] como segundo argumento se ejecuta una sola vez, cuando el componente aparece en pantalla.
-    // Lo usamos para cargar las quinielas apenas se muestra la página.
     useEffect(() => {
         cargarQuinielas()
+        if (esAdmin) cargarPartidos()
     }, [])
 
-    // Función que pide al backend la lista de quinielas y la guarda en el estado.
     const cargarQuinielas = async () => {
         try {
             const res = await api.get('/quinielas')
@@ -32,17 +25,34 @@ function Quinielas() {
         }
     }
 
-    // Función que inscribe al usuario en una quiniela específica.
+    // Cargamos todos los partidos para el selector del admin.
+    const cargarPartidos = async () => {
+        try {
+            const res = await api.get('/partidos')
+            setPartidos(res.data)
+        } catch {}
+    }
+
     const inscribirse = async (id_quiniela) => {
         try {
-            // Hacemos POST al endpoint de inscripción.
             await api.post(`/quinielas/${id_quiniela}/inscribirse`)
-            // alert muestra una ventanita emergente del navegador.
             alert('Inscripción exitosa')
-            // Recargamos la lista para que se actualice el contador de inscritos.
             cargarQuinielas()
         } catch (err) {
             alert(err.response?.data?.error || 'Error al inscribirse')
+        }
+    }
+
+    // Agrega un partido a una quiniela existente.
+    const agregarPartido = async (id_quiniela) => {
+        if (!partidoSeleccionado) return alert('Seleccioná un partido')
+        try {
+            await api.post(`/quinielas/${id_quiniela}/partidos`, { id_partido: partidoSeleccionado })
+            alert('Partido agregado')
+            setPartidoSeleccionado('')
+            setQuinielaExpandida(null)
+        } catch (err) {
+            alert(err.response?.data?.error || 'Error al agregar partido')
         }
     }
 
@@ -51,13 +61,10 @@ function Quinielas() {
             <h3 style={styles.titulo}>Quinielas disponibles</h3>
             {error && <p style={styles.error}>{error}</p>}
             <div style={styles.grid}>
-                {/* map recorre la lista de quinielas y devuelve una tarjeta (div) por cada una.
-                    "key" es un identificador único que necesita React para optimizar el renderizado. */}
                 {quinielas.map(q => (
                     <div key={q.id_quiniela} style={styles.card}>
                         <div style={styles.cardHeader}>
                             <h4>{q.nombre}</h4>
-                            {/* El color del badge cambia según el estado de la quiniela. */}
                             <span style={{
                                 ...styles.badge,
                                 background: q.estado === 'abierta' ? '#27ae60' : q.estado === 'cerrada' ? '#e67e22' : '#7f8c8d'
@@ -72,13 +79,42 @@ function Quinielas() {
                             <span>🏆 {q.tipo_puntuacion}</span>
                         </div>
                         <p style={styles.reglas}><strong>Reglas:</strong> {q.reglas}</p>
-                        {/* Solo mostramos el botón "Inscribirse" si:
-                            - el usuario es un jugador (no administrador)
-                            - y la quiniela está abierta. */}
-                        {usuario.tipo_usuario === 'jugador' && q.estado === 'abierta' && (
+
+                        {/* Botón inscribirse solo para jugadores en quinielas abiertas. */}
+                        {!esAdmin && q.estado === 'abierta' && (
                             <button style={styles.btn} onClick={() => inscribirse(q.id_quiniela)}>
                                 Inscribirse
                             </button>
+                        )}
+
+                        {/* Panel para agregar partidos, solo para admin. */}
+                        {esAdmin && (
+                            <div style={styles.adminPanel}>
+                                {quinielaExpandida === q.id_quiniela ? (
+                                    <div style={styles.agregarForm}>
+                                        <select
+                                            style={styles.select}
+                                            value={partidoSeleccionado}
+                                            onChange={e => setPartidoSeleccionado(e.target.value)}
+                                        >
+                                            <option value="">Seleccioná un partido</option>
+                                            {partidos.map(p => (
+                                                <option key={p.id_partido} value={p.id_partido}>
+                                                    {p.equipo_local} vs {p.equipo_visitante} — {new Date(p.fecha_hora).toLocaleDateString()}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <div style={styles.btnRow}>
+                                            <button style={styles.btnVerde} onClick={() => agregarPartido(q.id_quiniela)}>Agregar</button>
+                                            <button style={styles.btnGris}  onClick={() => setQuinielaExpandida(null)}>Cancelar</button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button style={styles.btnOutline} onClick={() => setQuinielaExpandida(q.id_quiniela)}>
+                                        + Agregar partido
+                                    </button>
+                                )}
+                            </div>
                         )}
                     </div>
                 ))}
@@ -87,7 +123,6 @@ function Quinielas() {
     )
 }
 
-// Objeto con los estilos en línea que usamos en el componente.
 const styles = {
     container:  { padding: '1.5rem' },
     titulo:     { marginBottom: '1rem', fontSize: '1.3rem' },
@@ -100,7 +135,13 @@ const styles = {
     info:       { display: 'flex', gap: '1rem', fontSize: '0.85rem', marginBottom: '0.8rem', flexWrap: 'wrap' },
     reglas:     { fontSize: '0.85rem', color: '#555', marginBottom: '1rem' },
     btn:        { width: '100%', padding: '0.6rem', background: '#2980b9', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.95rem' },
+    adminPanel: { marginTop: '0.8rem', borderTop: '1px solid #eee', paddingTop: '0.8rem' },
+    agregarForm:{ display: 'flex', flexDirection: 'column', gap: '0.6rem' },
+    select:     { padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem' },
+    btnRow:     { display: 'flex', gap: '0.5rem' },
+    btnVerde:   { flex: 1, padding: '0.5rem', background: '#27ae60', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' },
+    btnGris:    { flex: 1, padding: '0.5rem', background: '#95a5a6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' },
+    btnOutline: { width: '100%', padding: '0.5rem', background: 'transparent', color: '#2980b9', border: '1px solid #2980b9', borderRadius: '4px', cursor: 'pointer' },
 }
 
-// Exportamos el componente para que pueda usarse en otras partes de la app.
 export default Quinielas

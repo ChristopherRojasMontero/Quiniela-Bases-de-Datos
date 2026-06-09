@@ -1,22 +1,17 @@
-// Importamos el pool de conexiones para hacer consultas a la base de datos.
 const pool = require('../db/pool');
 
-// Función "registrar": guarda el pronóstico (goles predichos) que hace un usuario sobre un partido.
+// Registra el pronóstico de un usuario para un partido dentro de una quiniela.
 const registrar = async (req, res) => {
-    // Sacamos los datos del cuerpo de la petición.
     const { id_partido, id_quiniela, goles_local_predicho, goles_visitante_predicho } = req.body;
-
-    // El id del usuario viene del token (puesto por el middleware auth).
     const id_usuario = req.usuario.id_usuario;
 
-    // Validamos que todos los datos estén presentes. Usamos undefined porque 0 es un valor válido para goles.
     if (id_partido === undefined || id_quiniela === undefined ||
         goles_local_predicho === undefined || goles_visitante_predicho === undefined) {
         return res.status(400).json({ error: 'Todos los campos son obligatorios' });
     }
 
     try {
-        // El usuario debe estar inscrito en la quiniela para poder pronosticar.
+        // Verificamos que el usuario esté inscrito en la quiniela.
         const inscrito = await pool.query(
             'SELECT 1 FROM inscripcion WHERE id_usuario = $1 AND id_quiniela = $2',
             [id_usuario, id_quiniela]
@@ -25,7 +20,7 @@ const registrar = async (req, res) => {
             return res.status(403).json({ error: 'Debés estar inscrito en la quiniela para pronosticar' });
         }
 
-        // El partido debe pertenecer a la quiniela indicada.
+        // Verificamos que el partido pertenezca a la quiniela.
         const pertenece = await pool.query(
             'SELECT 1 FROM quiniela_partido WHERE id_quiniela = $1 AND id_partido = $2',
             [id_quiniela, id_partido]
@@ -34,7 +29,6 @@ const registrar = async (req, res) => {
             return res.status(400).json({ error: 'El partido no pertenece a esta quiniela' });
         }
 
-        // Insertamos el pronóstico en la base.
         const result = await pool.query(
             `INSERT INTO pronostico (id_usuario, id_partido, id_quiniela, goles_local_predicho, goles_visitante_predicho)
        VALUES ($1, $2, $3, $4, $5)
@@ -43,12 +37,11 @@ const registrar = async (req, res) => {
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
-        // 23505 = violación de unicidad: el usuario ya cargó un pronóstico para ese partido en esa quiniela.
+        // 23505 = violación de unicidad: ya existe un pronóstico para ese partido en esa quiniela.
         if (err.code === '23505') {
             return res.status(409).json({ error: 'Ya registraste un pronóstico para este partido en esta quiniela' });
         }
-        // Si el mensaje contiene "inició" o "finalizó", suele ser un trigger que impide pronosticar
-        // partidos que ya empezaron o terminaron.
+        // Error del trigger que bloquea pronósticos en partidos ya iniciados o finalizados.
         if (err.message.includes('inició') || err.message.includes('finalizó')) {
             return res.status(400).json({ error: err.message });
         }
@@ -57,30 +50,26 @@ const registrar = async (req, res) => {
     }
 };
 
-// Función "misPronosticos": devuelve el historial de pronósticos del usuario logueado.
-// Si llega el parámetro ?id_quiniela=X en la URL, filtra solo los de esa quiniela.
+// Devuelve el historial de pronósticos del usuario logueado.
+// Si llega ?id_quiniela=X filtra solo los de esa quiniela.
 const misPronosticos = async (req, res) => {
     const id_usuario  = req.usuario.id_usuario;
-    // req.query contiene los parámetros que vienen después del "?" en la URL.
     const id_quiniela = req.query.id_quiniela;
 
     try {
         let query, params;
 
-        // Si el usuario pidió filtrar por una quiniela específica, armamos esa consulta.
         if (id_quiniela) {
             query = `SELECT * FROM v_historial_pronosticos
                WHERE nombre_usuario = (SELECT nombre_usuario FROM usuario WHERE id_usuario = $1)
                AND quiniela = (SELECT nombre FROM quiniela WHERE id_quiniela = $2)`;
             params = [id_usuario, id_quiniela];
         } else {
-            // Si no, devolvemos TODO el historial del usuario.
             query = `SELECT * FROM v_historial_pronosticos
                WHERE nombre_usuario = (SELECT nombre_usuario FROM usuario WHERE id_usuario = $1)`;
             params = [id_usuario];
         }
 
-        // Ejecutamos la consulta elegida.
         const result = await pool.query(query, params);
         res.json(result.rows);
     } catch (err) {
@@ -89,5 +78,4 @@ const misPronosticos = async (req, res) => {
     }
 };
 
-// Exportamos las funciones para que el archivo de rutas pueda usarlas.
 module.exports = { registrar, misPronosticos };

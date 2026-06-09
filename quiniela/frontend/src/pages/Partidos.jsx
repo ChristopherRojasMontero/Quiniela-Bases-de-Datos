@@ -1,40 +1,22 @@
-// Hooks de React: useState para guardar estado; useEffect para ejecutar código al cargar el componente.
 import { useState, useEffect } from 'react'
-
-// Instancia de axios configurada para hablar con nuestro backend.
 import api from '../services/api'
 
-// Componente que muestra los partidos y permite al admin crearlos y cargar resultados.
 function Partidos() {
-    // Lista de partidos cargados desde el backend.
-    const [partidos, setPartidos] = useState([])
-
-    // Lista de equipos disponibles (solo se carga si el usuario es admin, para los selectores del formulario).
-    const [equipos, setEquipos]   = useState([])
-
-    // Datos del formulario para crear un partido nuevo.
-    const [form, setForm]         = useState({ id_equipo_local: '', id_equipo_visitante: '', fecha_hora: '' })
-
-    // Estado del formulario para cargar el resultado de un partido específico.
-    // id_partido indica qué partido se está editando; los otros campos son los goles.
+    const [partidos, setPartidos]   = useState([])
+    const [equipos, setEquipos]     = useState([])
+    const [form, setForm]           = useState({ id_equipo_local: '', id_equipo_visitante: '', fecha_hora: '' })
     const [resultado, setResultado] = useState({ id_partido: null, goles_local: '', goles_visitante: '' })
+    const [error, setError]         = useState('')
 
-    // Mensaje de error para mostrar al usuario.
-    const [error, setError]       = useState('')
-
-    // Leemos al usuario del localStorage y verificamos si es administrador.
-    // El operador ?. evita errores si "usuario" fuera null.
     const usuario = JSON.parse(localStorage.getItem('usuario'))
     const esAdmin = usuario?.tipo_usuario === 'administrador'
 
-    // useEffect con [] se ejecuta solo una vez al montar el componente.
-    // Cargamos partidos siempre; los equipos solo si el usuario es admin.
+    // Al montar el componente cargamos partidos y equipos (equipos solo si es admin).
     useEffect(() => {
         cargarPartidos()
         if (esAdmin) cargarEquipos()
     }, [])
 
-    // Función que pide al backend la lista de partidos.
     const cargarPartidos = async () => {
         try {
             const res = await api.get('/partidos')
@@ -44,7 +26,6 @@ function Partidos() {
         }
     }
 
-    // Función que pide al backend la lista de equipos disponibles.
     const cargarEquipos = async () => {
         try {
             const res = await api.get('/partidos/equipos')
@@ -52,31 +33,29 @@ function Partidos() {
         } catch {}
     }
 
-    // Función para crear un partido nuevo (solo lo usan los administradores).
     const crearPartido = async (e) => {
-        // Evitamos el reload de la página al enviar el formulario.
         e.preventDefault()
+        // Validamos en el frontend antes de mandar al servidor.
+        if (form.id_equipo_local === form.id_equipo_visitante) {
+            return alert('El equipo local y visitante deben ser distintos')
+        }
         try {
             await api.post('/partidos', form)
-            // Después de crear, limpiamos el formulario.
             setForm({ id_equipo_local: '', id_equipo_visitante: '', fecha_hora: '' })
-            // Recargamos la lista de partidos para ver el nuevo.
             cargarPartidos()
         } catch (err) {
             alert(err.response?.data?.error || 'Error al crear partido')
         }
     }
 
-    // Función para registrar el resultado final de un partido.
+    // Registra el resultado final. Esto dispara el trigger de puntuación en la BD.
     const actualizarResultado = async (e) => {
         e.preventDefault()
         try {
-            // parseInt convierte el texto del input en número entero.
             await api.put(`/partidos/${resultado.id_partido}/resultado`, {
                 goles_local:     parseInt(resultado.goles_local),
                 goles_visitante: parseInt(resultado.goles_visitante),
             })
-            // Limpiamos el estado de "resultado" para cerrar el formulario.
             setResultado({ id_partido: null, goles_local: '', goles_visitante: '' })
             cargarPartidos()
         } catch (err) {
@@ -84,7 +63,6 @@ function Partidos() {
         }
     }
 
-    // Objeto que asocia cada estado posible con un color, para usarlo en los badges.
     const estadoColor = { pendiente: '#e67e22', en_curso: '#2980b9', finalizado: '#27ae60' }
 
     return (
@@ -92,12 +70,11 @@ function Partidos() {
             <h3 style={styles.titulo}>Partidos</h3>
             {error && <p style={styles.error}>{error}</p>}
 
-            {/* Si el usuario es admin, mostramos el formulario para crear partidos. */}
+            {/* Formulario para crear partidos, solo visible para administradores. */}
             {esAdmin && (
                 <div style={styles.formCard}>
                     <h4>Crear partido</h4>
                     <form onSubmit={crearPartido} style={styles.form}>
-                        {/* Selector de equipo local. Al cambiar, actualizamos el campo correspondiente del form. */}
                         <select style={styles.input} value={form.id_equipo_local} onChange={e => setForm({...form, id_equipo_local: e.target.value})} required>
                             <option value="">Equipo local</option>
                             {equipos.map(eq => <option key={eq.id_equipo} value={eq.id_equipo}>{eq.nombre}</option>)}
@@ -106,7 +83,6 @@ function Partidos() {
                             <option value="">Equipo visitante</option>
                             {equipos.map(eq => <option key={eq.id_equipo} value={eq.id_equipo}>{eq.nombre}</option>)}
                         </select>
-                        {/* Input especial datetime-local: muestra un selector de fecha y hora. */}
                         <input style={styles.input} type="datetime-local" value={form.fecha_hora} onChange={e => setForm({...form, fecha_hora: e.target.value})} required />
                         <button style={styles.btn} type="submit">Crear</button>
                     </form>
@@ -114,31 +90,26 @@ function Partidos() {
             )}
 
             <div style={styles.grid}>
-                {/* Iteramos sobre cada partido y armamos una tarjeta. */}
                 {partidos.map(p => (
                     <div key={p.id_partido} style={styles.card}>
                         <div style={styles.cardHeader}>
                             <strong>{p.equipo_local} vs {p.equipo_visitante}</strong>
                             <span style={{ ...styles.badge, background: estadoColor[p.estado] }}>{p.estado}</span>
                         </div>
-                        {/* new Date(...).toLocaleString() convierte la fecha al formato local del usuario. */}
                         <p style={styles.fecha}>{new Date(p.fecha_hora).toLocaleString()}</p>
 
-                        {/* Si el partido ya terminó, mostramos el marcador final. */}
+                        {/* Marcador final, solo visible si el partido terminó. */}
                         {p.estado === 'finalizado' && (
                             <p style={styles.marcador}>{p.goles_local} - {p.goles_visitante}</p>
                         )}
 
-                        {/* Si es admin y el partido aún no terminó, mostramos las opciones para cargar el resultado. */}
+                        {/* Formulario de resultado para admin en partidos no finalizados. */}
                         {esAdmin && p.estado !== 'finalizado' && (
-                            // Si el admin ya hizo clic en "Registrar resultado" de este partido, mostramos el formulario.
-                            // Si no, mostramos solo el botón.
                             resultado.id_partido === p.id_partido ? (
                                 <form onSubmit={actualizarResultado} style={styles.resultForm}>
-                                    <input style={styles.inputSmall} type="number" min="0" placeholder="Local" value={resultado.goles_local} onChange={e => setResultado({...resultado, goles_local: e.target.value})} required />
+                                    <input style={styles.inputSmall} type="number" min="0" placeholder="Local"  value={resultado.goles_local}     onChange={e => setResultado({...resultado, goles_local: e.target.value})}     required />
                                     <input style={styles.inputSmall} type="number" min="0" placeholder="Visit." value={resultado.goles_visitante} onChange={e => setResultado({...resultado, goles_visitante: e.target.value})} required />
                                     <button style={styles.btnSm} type="submit">Guardar</button>
-                                    {/* Botón cancelar: limpia el estado de "resultado" para volver al botón. */}
                                     <button style={{...styles.btnSm, background: '#95a5a6'}} type="button" onClick={() => setResultado({ id_partido: null, goles_local: '', goles_visitante: '' })}>Cancelar</button>
                                 </form>
                             ) : (
@@ -154,7 +125,6 @@ function Partidos() {
     )
 }
 
-// Estilos en línea utilizados en el componente.
 const styles = {
     container:  { padding: '1.5rem' },
     titulo:     { marginBottom: '1rem', fontSize: '1.3rem' },
@@ -175,5 +145,4 @@ const styles = {
     btnOutline: { marginTop: '0.8rem', width: '100%', padding: '0.5rem', background: 'transparent', color: '#2980b9', border: '1px solid #2980b9', borderRadius: '4px', cursor: 'pointer' },
 }
 
-// Exportamos el componente para usarlo en otras partes de la app.
 export default Partidos
